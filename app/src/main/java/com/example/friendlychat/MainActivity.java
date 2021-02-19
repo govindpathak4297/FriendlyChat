@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -15,6 +16,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.webkit.MimeTypeMap;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -103,8 +105,8 @@ public class MainActivity extends AppCompatActivity {
                 // TODO: Fire an intent to show an image picker
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.setType("image/jpeg");
-                intent.putExtra(Intent.EXTRA_LOCAL_ONLY,true);
-                startActivityForResult(Intent.createChooser(intent,"complete action using"), RC_PHOTO_PICKER);
+                intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+                startActivityForResult(Intent.createChooser(intent, "complete action using"), RC_PHOTO_PICKER);
             }
         });
 
@@ -148,44 +150,46 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     //user is signed out
                     onSignedOutCleanup();
-                    startActivityForResult(AuthUI.getInstance().createSignInIntentBuilder().setIsSmartLockEnabled(false).setAvailableProviders(providers).build(), RC_SIGN_IN);
+                    startActivityForResult(AuthUI.getInstance().createSignInIntentBuilder().setIsSmartLockEnabled(true).setAvailableProviders(providers).build(), RC_SIGN_IN);
                 }
 
             }
         };
     }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode== RC_SIGN_IN)
-        {
-            if(resultCode==RESULT_OK)
-                Toast.makeText(this,"Signed in",Toast.LENGTH_SHORT).show();
-            else if (resultCode==RESULT_CANCELED)
-            {Toast.makeText(this,"Sign in Cancelled",Toast.LENGTH_SHORT).show();
-            finish();}
-            else if(requestCode==RC_PHOTO_PICKER && resultCode==RESULT_OK) {
+        if (requestCode == RC_SIGN_IN) {
+            if (resultCode == RESULT_OK)
+                Toast.makeText(this, "Signed in", Toast.LENGTH_SHORT).show();
+            else if (resultCode == RESULT_CANCELED) {
+                Toast.makeText(this, "Sign in Cancelled", Toast.LENGTH_SHORT).show();
+                finish();
+            } else if (requestCode == RC_PHOTO_PICKER && resultCode == RESULT_OK) {
                 Uri selectedImageUri = data.getData();
-               StorageReference photoRef = mStorageReference.child(selectedImageUri.getLastPathSegment());
-              //Upload file to firebase storage
-               photoRef.putFile(selectedImageUri).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
-                   @Override
-                   public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                       Log.v("MainActivity","yha tak to aa gya");
-                       Task<Uri> task =  taskSnapshot.getMetadata().getReference().getDownloadUrl();
-                    task.addOnSuccessListener(new OnSuccessListener<Uri>() {
-                        @Override
-                        public void onSuccess(Uri uri) {
-                            String photoUrl = uri.toString();
-                            FriendlyMessage friendlyMessage = new FriendlyMessage(null,mUsername,photoUrl);
-                            mMessagesDatabaseReference.push().setValue(friendlyMessage);
-                        }
-                    });
-                   }
-               });
 
+                final StorageReference selectedImageRef = mStorageReference.child(System.currentTimeMillis() + "." + getFileExtension(selectedImageUri));
+                selectedImageRef.putFile(selectedImageUri).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
+                    @Override
+                    public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                        selectedImageRef.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                            @Override
+                            public void onSuccess(Uri uri) {
+                                FriendlyMessage friendlyMessage = new FriendlyMessage(null, mUsername, uri.toString());
+                                mMessagesDatabaseReference.push().setValue(friendlyMessage);
+                            }
+                        });
+                    }
+                });
             }
         }
+    }
+
+    private String getFileExtension(Uri mUri) {
+        ContentResolver cr = getContentResolver();
+        MimeTypeMap mime = MimeTypeMap.getSingleton();
+        return mime.getExtensionFromMimeType(cr.getType(mUri));
     }
 
     @Override
@@ -197,21 +201,21 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-         switch (item.getItemId()) {
-             case R.id.sign_out_menu:
+        switch (item.getItemId()) {
+            case R.id.sign_out_menu:
                 AuthUI.getInstance().signOut(this);
-                 return true;
-             default:
-                 return super.onOptionsItemSelected(item);
-         }
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
     }
 
 
     @Override
     protected void onPause() {
         super.onPause();
-        if(mAuthStateListener!=null)
-        mFirebaseAuth.removeAuthStateListener(mAuthStateListener);
+        if (mAuthStateListener != null)
+            mFirebaseAuth.removeAuthStateListener(mAuthStateListener);
         detachDatabaseReadListener();
         mMessageAdapter.clear();
     }
@@ -234,32 +238,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void attachDatabaseReadListener() {
-       if(mChildEventListener==null) {
-           mChildEventListener = new ChildEventListener() {
-               @Override
-               public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-                   FriendlyMessage friendlyMessage = snapshot.getValue(FriendlyMessage.class);
-                   mMessageAdapter.add(friendlyMessage);
-               }
+        if (mChildEventListener == null) {
+            mChildEventListener = new ChildEventListener() {
+                @Override
+                public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                    FriendlyMessage friendlyMessage = snapshot.getValue(FriendlyMessage.class);
+                    mMessageAdapter.add(friendlyMessage);
+                }
 
-               @Override
-               public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-               }
+                @Override
+                public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                }
 
-               @Override
-               public void onChildRemoved(@NonNull DataSnapshot snapshot) {
-               }
+                @Override
+                public void onChildRemoved(@NonNull DataSnapshot snapshot) {
+                }
 
-               @Override
-               public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-               }
+                @Override
+                public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                }
 
-               @Override
-               public void onCancelled(@NonNull DatabaseError error) {
-               }
-           };
-           mMessagesDatabaseReference.addChildEventListener(mChildEventListener);
-       }
+                @Override
+                public void onCancelled(@NonNull DatabaseError error) {
+                }
+            };
+            mMessagesDatabaseReference.addChildEventListener(mChildEventListener);
+        }
     }
 
     private void detachDatabaseReadListener() {
